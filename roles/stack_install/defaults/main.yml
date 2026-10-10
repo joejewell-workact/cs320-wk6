@@ -1,3 +1,27 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# defaults file for stack_install
+stack_install_packages:
+  # weebserver
+  - nginx
+  # database
+  - mariadb-server
+  - mariadb-client
+  # php runtime
+  - php-fpm
+  - php-cli
+  - php-mysql
+  - php-curl
+  - php-xml
+  - php-mbstring
+  - php-intl
+  - php-zip
+  - php-gd
+  - php-imagick
+  - php-igbinary
+  - php-bcmath
+  # other things needed 
+  - openssl
+  - curl
+  - unzip
+  - python3-pymysql
+
+stack_install_wpcli_url: "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"

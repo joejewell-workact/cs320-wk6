@@ -1,3 +1,24 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# tasks file for stack_install
+- name: Install LEMP stack and WordPress dependencies
+  ansible.builtin.apt:
+    name: "{{ stack_install_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install WP-CLI
+  ansible.builtin.get_url:
+    url: "{{ stack_install_wpcli_url }}"
+    dest: "{{ wp_cli_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Verify WP-CLI runs
+  ansible.builtin.command: "{{ wp_cli_path }} cli version --allow-root"
+  register: stack_install_wpcli_version
+  changed_when: false
+
+- name: Show WP-CLI version
+  ansible.builtin.debug:
+    msg: "{{ stack_install_wpcli_version.stdout }}"
