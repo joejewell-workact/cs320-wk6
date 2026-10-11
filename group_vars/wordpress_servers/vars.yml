@@ -36,3 +36,8 @@ php_version: "8.3"
 wp_plugins:
   - classic-editor
   - duplicate-post
+
+# ---------- Site configuration ----------
+wp_site_tagline: "Deployed with Ansible"
+wp_timezone: "America/Detroit"
+wp_permalink_structure: "/%postname%/"

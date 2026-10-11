@@ -1,0 +1,87 @@
+---
+- name: check wp deployment
+  hosts: wordpress_servers
+  become: true
+  gather_facts: false
+
+  tasks:
+    #  services
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Assert required services are running and enabled
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services[item].state == 'running'
+          - ansible_facts.services[item].status == 'enabled'
+        success_msg: "{{ item }} is running and enabled"
+        fail_msg: "{{ item }} is NOT running/enabled"
+      loop:
+        - nginx.service
+        - mariadb.service
+        - "php{{ php_version }}-fpm.service"
+
+    # wordpress
+    - name: makesure wp core is installed
+      ansible.builtin.command: "{{ wp_cli_path }} core is-installed --path={{ wp_install_dir }}"
+      become_user: "{{ wp_app_user }}"
+      changed_when: false
+
+    - name: get version
+      ansible.builtin.command: "{{ wp_cli_path }} core version --path={{ wp_install_dir }}"
+      become_user: "{{ wp_app_user }}"
+      register: validate_wp_version
+      changed_when: false
+
+    - name: get used plugins
+      ansible.builtin.command: "{{ wp_cli_path }} plugin list --status=active --field=name --path={{ wp_install_dir }}"
+      become_user: "{{ wp_app_user }}"
+      register: validate_active_plugins
+      changed_when: false
+
+    - name: makesure they are active
+      ansible.builtin.assert:
+        that: item in validate_active_plugins.stdout_lines
+        success_msg: "Plugin {{ item }} is active"
+        fail_msg: "Plugin {{ item }} is NOT active"
+      loop: "{{ wp_plugins }}"
+
+    # check website (make sure control node is active)
+    - name: Check HTTPS home page
+      ansible.builtin.uri:
+        url: "https://{{ nginx_server_name }}/"
+        validate_certs: false
+        return_content: true
+        status_code: 200
+      register: validate_https
+      delegate_to: localhost
+      become: false
+
+    - name: check title
+      ansible.builtin.assert:
+        that: wp_site_title in validate_https.content
+        success_msg: "HTTPS home page shows '{{ wp_site_title }}'"
+
+    - name: checl response
+      ansible.builtin.uri:
+        url: "http://{{ nginx_server_name }}/"
+        follow_redirects: none
+        status_code: [200, 301, 302]
+      register: validate_http
+      delegate_to: localhost
+      become: false
+
+    - name: check login page
+      ansible.builtin.uri:
+        url: "https://{{ nginx_server_name }}/wp-login.php"
+        validate_certs: false
+        status_code: 200
+      delegate_to: localhost
+      become: false
+
+    - name: make summary
+      ansible.builtin.debug:
+        msg:
+          - "WordPress {{ validate_wp_version.stdout }} installed at {{ wp_install_dir }}"
+          - "HTTPS: {{ validate_https.status }} | HTTP: {{ validate_http.status }}"
+          - "Active plugins: {{ validate_active_plugins.stdout_lines | join(', ') }}"

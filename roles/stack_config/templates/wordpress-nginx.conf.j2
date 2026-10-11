@@ -1,0 +1,40 @@
+# {{ ansible_managed }}
+server {
+    listen 80;
+    listen [::]:80;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+
+    server_name {{ nginx_server_name }};
+    root {{ wp_install_dir }};
+    index index.php;
+
+    ssl_certificate     {{ ssl_cert_path }};
+    ssl_certificate_key {{ ssl_key_path }};
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    client_max_body_size {{ stack_config_php_upload_max }};
+
+    location = /favicon.ico { log_not_found off; access_log off; }
+    location = /robots.txt  { allow all; log_not_found off; access_log off; }
+
+    # Deny hidden files (.htaccess, .git, etc.)
+    location ~ /\. { deny all; }
+
+    # Never execute PHP from uploads
+    location ~* /(?:uploads|files)/.*\.php$ { deny all; }
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:{{ stack_config_fpm_socket }};
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|webp)$ {
+        expires max;
+        log_not_found off;
+    }
+}

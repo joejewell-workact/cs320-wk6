@@ -1,0 +1,20 @@
+; {{ ansible_managed }}
+[wordpress]
+user = {{ wp_app_user }}
+group = {{ wp_app_group }}
+
+listen = {{ stack_config_fpm_socket }}
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+
+pm = dynamic
+pm.max_children = 10
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3
+
+php_admin_value[memory_limit] = {{ stack_config_php_memory_limit }}
+php_admin_value[upload_max_filesize] = {{ stack_config_php_upload_max }}
+php_admin_value[post_max_size] = {{ stack_config_php_upload_max }}
+php_admin_flag[log_errors] = on

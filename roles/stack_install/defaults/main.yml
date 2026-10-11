@@ -1,6 +1,6 @@
 ---
 stack_install_packages:
-  # weebserver
+  # webserver
   - nginx
   # database
   - mariadb-server
@@ -23,5 +23,6 @@ stack_install_packages:
   - curl
   - unzip
   - python3-pymysql
+  - acl
 
 stack_install_wpcli_url: "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"

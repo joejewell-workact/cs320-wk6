@@ -1,3 +1,14 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# defaults file for stack_config
+# seperate user data from web root 
+stack_config_app_home: "/var/lib/{{ wp_app_user }}"
+
+# php resource alocation
+stack_config_fpm_socket: "/run/php/php{{ php_version }}-fpm-wordpress.sock"
+stack_config_fpm_pool_file: "/etc/php/{{ php_version }}/fpm/pool.d/wordpress.conf"
+
+# php max resources 
+stack_config_php_memory_limit: "256M"
+stack_config_php_upload_max: "64M"
+
+# nginx site 
+stack_config_nginx_site: "/etc/nginx/sites-available/wordpress.conf"

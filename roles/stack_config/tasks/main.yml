@@ -1,3 +1,102 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# tasks file for stack_config
+# application account 
+- name: Create WordPress application account
+  ansible.builtin.user:
+    name: "{{ wp_app_user }}"
+    group: "{{ wp_app_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ stack_config_app_home }}"
+    create_home: true
+    state: present
+
+# wordpress directory 
+- name: Create WordPress directory
+  ansible.builtin.file:
+    path: "{{ wp_install_dir }}"
+    state: directory
+    owner: "{{ wp_app_user }}"
+    group: "{{ wp_app_group }}"
+    mode: "0755"
+
+# database service 
+- name: Ensure MariaDB is running and enabled
+  ansible.builtin.service:
+    name: mariadb
+    state: started
+    enabled: true
+
+# php 
+- name: Deploy WordPress PHP-FPM pool
+  ansible.builtin.template:
+    src: php-fpm-wordpress.conf.j2
+    dest: "{{ stack_config_fpm_pool_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart php-fpm
+
+- name: Validate PHP-FPM configuration
+  ansible.builtin.command: "php-fpm{{ php_version }} -t"
+  changed_when: false
+
+- name: Ensure PHP-FPM is running and enabled
+  ansible.builtin.service:
+    name: "php{{ php_version }}-fpm"
+    state: started
+    enabled: true
+
+# slef signed cert 
+- name: Generate self-signed cert 
+  ansible.builtin.command: >
+    openssl req -x509 -nodes -newkey rsa:2048 -days 365
+    -keyout {{ ssl_key_path }}
+    -out {{ ssl_cert_path }}
+    -subj "/CN={{ nginx_server_name }}"
+    -addext "subjectAltName=IP:{{ nginx_server_name }}"
+  args:
+    creates: "{{ ssl_cert_path }}"
+  notify: Reload nginx
+
+- name: Restrict TLS private key permissions
+  ansible.builtin.file:
+    path: "{{ ssl_key_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+# nginx site 
+- name: setup wp ngix site 
+  ansible.builtin.template:
+    src: wordpress-nginx.conf.j2
+    dest: "{{ stack_config_nginx_site }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Enable WordPress nginx site
+  ansible.builtin.file:
+    src: "{{ stack_config_nginx_site }}"
+    dest: /etc/nginx/sites-enabled/wordpress.conf
+    state: link
+  notify: Reload nginx
+
+- name: Disable default nginx 
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Validate nginx config 
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Ensure nginx is working properly 
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Apply config changes before the next step 
+  ansible.builtin.meta: flush_handlers

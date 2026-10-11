@@ -1,3 +1,111 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# tasks file for wordpress
+# database (as root)
+- name: create wordpress database
+  ansible.mariadb.mariadb_db:
+    name: "{{ wp_db_name }}"
+    encoding: utf8mb4
+    collation: utf8mb4_unicode_ci
+    state: present
+    login_unix_socket: "{{ wordpress_db_socket }}"
+
+- name: create wordpress database account
+  ansible.mariadb.mariadb_user:
+    name: "{{ wp_db_user }}"
+    password: "{{ wp_db_password }}"
+    host: "{{ wp_db_host }}"
+    priv: "{{ wp_db_name }}.*:ALL"
+    state: present
+    login_unix_socket: "{{ wordpress_db_socket }}"
+  no_log: true
+
+# woedpress app acct
+- name: Deploy and configure wp with wp-cli
+  become_user: "{{ wp_app_user }}"
+  block:
+    - name: download wp core
+      ansible.builtin.command: "{{ wp_cli_path }} core download --locale={{ wp_locale }}"
+      args:
+        chdir: "{{ wp_install_dir }}"
+        creates: "{{ wp_install_dir }}/wp-includes/version.php"
+
+    - name: Create wp-config.php
+      ansible.builtin.command: >-
+        {{ wp_cli_path }} config create
+        --dbname={{ wp_db_name }}
+        --dbuser={{ wp_db_user }}
+        --dbpass={{ wp_db_password }}
+        --dbhost={{ wp_db_host }}
+      args:
+        chdir: "{{ wp_install_dir }}"
+        creates: "{{ wp_install_dir }}/wp-config.php"
+      no_log: true
+
+    - name: Restrict wp-config.php permissions
+      ansible.builtin.file:
+        path: "{{ wp_install_dir }}/wp-config.php"
+        owner: "{{ wp_app_user }}"
+        group: "{{ wp_app_group }}"
+        mode: "0640"
+
+    - name: Check wp is installed
+      ansible.builtin.command: "{{ wp_cli_path }} core is-installed"
+      args:
+        chdir: "{{ wp_install_dir }}"
+      register: wordpress_installed
+      changed_when: false
+      failed_when: wordpress_installed.rc not in [0, 1]
+
+    - name: Install wp
+      ansible.builtin.command: >-
+        {{ wp_cli_path }} core install
+        --url={{ wp_site_url }}
+        --title={{ wp_site_title | quote }}
+        --admin_user={{ wp_admin_user }}
+        --admin_password={{ wp_admin_password }}
+        --admin_email={{ wp_admin_email }}
+        --skip-email
+      args:
+        chdir: "{{ wp_install_dir }}"
+      when: wordpress_installed.rc == 1
+      no_log: true
+
+    - name: Configure site options
+      ansible.builtin.command: "{{ wp_cli_path }} option update {{ item.key }} {{ item.value | quote }}"
+      args:
+        chdir: "{{ wp_install_dir }}"
+      loop: "{{ wordpress_site_options | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      register: wordpress_option_result
+      changed_when: "'unchanged' not in wordpress_option_result.stdout"
+
+    - name: Read current permalink structure
+      ansible.builtin.command: "{{ wp_cli_path }} option get permalink_structure"
+      args:
+        chdir: "{{ wp_install_dir }}"
+      register: wordpress_permalink
+      changed_when: false
+
+    - name: Set permalink structure
+      ansible.builtin.command: "{{ wp_cli_path }} rewrite structure {{ wp_permalink_structure | quote }}"
+      args:
+        chdir: "{{ wp_install_dir }}"
+      when: wordpress_permalink.stdout != wp_permalink_structure
+
+    - name: Check plugin status
+      ansible.builtin.command: "{{ wp_cli_path }} plugin is-active {{ item }}"
+      args:
+        chdir: "{{ wp_install_dir }}"
+      loop: "{{ wp_plugins }}"
+      register: wordpress_plugin_status
+      changed_when: false
+      failed_when: wordpress_plugin_status.rc not in [0, 1]
+
+    - name: Install and activate plugins
+      ansible.builtin.command: "{{ wp_cli_path }} plugin install {{ item.item }} --activate"
+      args:
+        chdir: "{{ wp_install_dir }}"
+      loop: "{{ wordpress_plugin_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.rc != 0

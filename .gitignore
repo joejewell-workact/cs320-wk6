@@ -1,3 +1,4 @@
 *.retry
 *.log
 .vault_pass
+project documentation/
